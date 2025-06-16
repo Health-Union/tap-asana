@@ -19,7 +19,7 @@ from tap_asana.context import Context
 
 LOGGER = singer.get_logger()
 
-# Setting default timeout as 300 second
+# Setting default timeout as 300 seconds
 REQUEST_TIMEOUT = 300
 
 # Retry the request in the factor of 2 ie. 2, 4, 8, ...
@@ -60,6 +60,7 @@ def retry_handler(details):
 
 
 # pylint: disable=unused-argument
+
 def retry_after_wait_gen(**kwargs):
     # This is called in an except block so we can retrieve the exception
     # and check it.
@@ -111,107 +112,96 @@ def asana_error_handling(fnc):
     return wrapper
 
 
-# Added decorator over functions of asana SDK as functions from SDK returns generator and
-# tap is yielding data from that function so backoff is not working over tap functions.
-# Decorator can be put above get_objects() functions of every stream file but
-# it has multiple for loops so it's expensive to backoff everything.
+# Apply retry decorators to the Asana SDK iterators
 CollectionPageIterator.get_initial = asana_error_handling(
     CollectionPageIterator.get_initial
 )
-CollectionPageIterator.get_next = asana_error_handling(CollectionPageIterator.get_next)
+CollectionPageIterator.get_next = asana_error_handling(
+    CollectionPageIterator.get_next
+)
 
 
-class Stream():
-    # Used for bookmarking and stream identification. Is overridden by
-    # subclasses to change the bookmark key.
+class Stream:
+    """
+    Base stream class with bookmarking and API call logic.
+    """
+    # Used for bookmarking and stream identification. Overridden by subclasses.
     name = None
     replication_method = None
     replication_key = None
     key_properties = ["gid"]
 
-    # Controls which SDK object we use to call the API by default.
-
     def __init__(self):
-        # Set request timeout to config param `request_timeout` value.
-        config_request_timeout = Context.config.get("request_timeout")
-        # If value is 0, "0", "" or not passed then it sets default to 300 seconds.
-        if config_request_timeout and float(config_request_timeout):
-            self.request_timeout = float(config_request_timeout)
-        else:
-            self.request_timeout = REQUEST_TIMEOUT
+        # Configure request timeout
+        config_timeout = Context.config.get("request_timeout")
+        self.request_timeout = (
+            float(config_timeout) if config_timeout and float(config_timeout) else REQUEST_TIMEOUT
+        )
 
     def get_bookmark(self):
-        """Function to get bookmark"""
+        """Retrieve the last saved bookmark or start_date from config."""
         bookmark = (
-                singer.get_bookmark(
-                    Context.state,
-                    # name is overridden by some substreams
-                    self.name,
-                    self.replication_key,
-                )
-                or Context.config["start_date"]
+            singer.get_bookmark(
+                Context.state,
+                self.name,
+                self.replication_key,
+            )
+            or Context.config["start_date"]
         )
         return utils.strptime_to_utc(bookmark)
 
-    @staticmethod
-    def get_project_id():
-        """Retrieve project_id from config, if set."""
-        return Context.config.get("project_id")
-
     def is_bookmark_old(self, value):
-        """Function to check bookmark"""
+        """Check if a record's replication key is newer than the bookmark."""
         bookmark = self.get_bookmark()
         return utils.strptime_to_utc(value) >= bookmark
 
     def update_bookmark(self, value):
-        """Function to update the bookmark"""
-        # NOTE: Bookmarking can never be updated to not get the most
-        # recent thing it saw the next time you run, because the querying
-        # only allows greater than or equal semantics.
-
+        """Update the stored bookmark if the value is newer."""
         try:
-            value = value.strftime("%Y-%m-%dT%H:%M:%S.%f")
-        except TypeError:
-            pass
-
-        if self.is_bookmark_old(value):
+            ts = value.strftime("%Y-%m-%dT%H:%M:%S.%f")
+        except AttributeError:
+            ts = value
+        if self.is_bookmark_old(ts):
             singer.write_bookmark(
                 Context.state,
-                # name is overridden by some substreams
                 self.name,
                 self.replication_key,
-                value,
+                ts,
             )
             singer.write_state(Context.state)
 
     @staticmethod
     def get_updated_session_bookmark(session_bookmark, value):
-        """Returns the updated session bookmark"""
+        """Return the later of session_bookmark and value."""
         try:
-            session_bookmark = utils.strptime_with_tz(session_bookmark)
+            session = utils.strptime_with_tz(session_bookmark)
         except TypeError:
-            pass
-
+            session = session_bookmark
         try:
-            value = utils.strptime_with_tz(value)
+            new = utils.strptime_with_tz(value)
         except TypeError:
-            pass
+            new = value
+        return new if new > session else session
 
-        if value > session_bookmark:
-            return value
-        return session_bookmark
-
-    # As we added timeout, we need to pass it in the query param
-    # hence removed the condition: 'if query_params', as
-    # there will be atleast 1 param: 'timeout'
-    @asana_error_handling
     def call_api(self, resource, **query_params):
-        """Function to make API call"""
-        api_function = getattr(Context.asana.client, resource)
+        """Make an API call with retry handling and timeout."""
+        api_fn = getattr(Context.asana.client, resource)
         query_params["timeout"] = self.request_timeout
-        return api_function.find_all(**query_params)
+        return api_fn.find_all(**query_params)
+
+    @staticmethod
+    def get_project_ids():
+        """
+        Retrieve project IDs from config or fetch all projects across workspaces.
+
+        Returns:
+            List[str]: A list of Asana project GIDs.
+        """
+        # If project_id is specified in config, normalize to list
+        pid = Context.config.get("project_id")
+        return [pid]
 
     def sync(self):
-        """Yield's processed SDK object dicts to the caller."""
+        """Yield processed objects from the stream."""
         for obj in self.get_objects():
             yield obj

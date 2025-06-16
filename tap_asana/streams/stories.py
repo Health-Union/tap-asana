@@ -66,35 +66,43 @@ class Stories(Stream):
         "type"
     ]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Pre-fetch project IDs using the helper method
+        self.project_ids = self.get_project_ids()
+
     def get_objects(self):
-        """Get stream objects for a single project"""
+        """Get stream object"""
         bookmark = self.get_bookmark()
         session_bookmark = bookmark
         modified_since = bookmark.strftime("%Y-%m-%dT%H:%M:%S.%f")
         opt_fields = ",".join(self.fields)
-        project_id = self.get_project_id()
 
-        LOGGER.info(f"Fetching stories for project %s", project_id)
+        LOGGER.info("Fetching stories...")
+        projects_total = len(self.project_ids)
+        projects_fraction = max(projects_total // 100, 1)  # ensure no division by zero
 
-        # iterate over tasks in the project
-        for task in self.call_api(
-            "tasks",
-            project=project_id,
-            modified_since=modified_since,
-        ):
-            task_gid = task.get("gid")
-            for story in Context.asana.client.stories.get_stories_for_task(
-                task_gid=task_gid,
-                opt_fields=opt_fields,
-                timeout=self.request_timeout,
+        for indx, project_id in enumerate(self.project_ids, 1):
+            if (indx % projects_fraction == 0):
+                LOGGER.info(f"Fetching done for projects: {indx - 1}/{projects_total}")
+
+            for task in self.call_api(
+                "tasks",
+                project=project_id,
+                modified_since=modified_since,
             ):
-                session_bookmark = self.get_updated_session_bookmark(
-                    session_bookmark, story[self.replication_key]
-                )
-                if self.is_bookmark_old(story[self.replication_key]):
-                    yield story
+                task_gid = task.get("gid")
+                for story in Context.asana.client.stories.get_stories_for_task(
+                    task_gid=task_gid,
+                    opt_fields=opt_fields,
+                    timeout=self.request_timeout,
+                ):
+                    session_bookmark = self.get_updated_session_bookmark(
+                        session_bookmark, story[self.replication_key]
+                    )
+                    if self.is_bookmark_old(story[self.replication_key]):
+                        yield story
 
         self.update_bookmark(session_bookmark)
 
-# register the stream
 Context.stream_objects["stories"] = Stories
