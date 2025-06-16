@@ -69,7 +69,7 @@ class Stories(Stream):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Pre-fetch project IDs using the helper method
-        self.project_ids = self.get_project_ids()
+        self.project_gids = self.get_project_gids()
 
     def get_objects(self):
         """Get stream object"""
@@ -79,16 +79,16 @@ class Stories(Stream):
         opt_fields = ",".join(self.fields)
 
         LOGGER.info("Fetching stories...")
-        projects_total = len(self.project_ids)
+        projects_total = len(self.project_gids)
         projects_fraction = max(projects_total // 100, 1)  # ensure no division by zero
 
-        for indx, project_id in enumerate(self.project_ids, 1):
+        for indx, project_gid in enumerate(self.project_gids, 1):
             if (indx % projects_fraction == 0):
                 LOGGER.info(f"Fetching done for projects: {indx - 1}/{projects_total}")
 
             for task in self.call_api(
                 "tasks",
-                project=project_id,
+                project=project_gid,
                 modified_since=modified_since,
             ):
                 task_gid = task.get("gid")

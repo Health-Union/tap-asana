@@ -190,7 +190,7 @@ class Stream:
         return api_fn.find_all(**query_params)
 
     @staticmethod
-    def get_project_ids():
+    def get_project_gids():
         """
         Retrieve project IDs from config or fetch all projects across workspaces.
 
@@ -198,8 +198,8 @@ class Stream:
             List[str]: A list of Asana project GIDs.
         """
         # If project_id is specified in config, normalize to list
-        pid = Context.config.get("project_id")
-        return [pid]
+        pid = Context.config.get("project_gid")
+        return pid
 
     def sync(self):
         """Yield processed objects from the stream."""
