@@ -17,7 +17,6 @@ from oauthlib.oauth2 import TokenExpiredError
 from singer import utils
 from tap_asana.context import Context
 
-
 LOGGER = singer.get_logger()
 
 # Setting default timeout as 300 second
@@ -44,6 +43,7 @@ def is_not_status_code_fn(status_code):
             return True
         # Retry other errors up to the max
         return False
+
     return gen_fn
 
 
@@ -107,7 +107,9 @@ def asana_error_handling(fnc):
     @functools.wraps(fnc)
     def wrapper(*args, **kwargs):
         return fnc(*args, **kwargs)
+
     return wrapper
+
 
 # Added decorator over functions of asana SDK as functions from SDK returns generator and
 # tap is yielding data from that function so backoff is not working over tap functions.
@@ -118,6 +120,7 @@ CollectionPageIterator.get_initial = asana_error_handling(
 )
 CollectionPageIterator.get_next = asana_error_handling(CollectionPageIterator.get_next)
 
+
 class Stream():
     # Used for bookmarking and stream identification. Is overridden by
     # subclasses to change the bookmark key.
@@ -125,6 +128,7 @@ class Stream():
     replication_method = None
     replication_key = None
     key_properties = ["gid"]
+
     # Controls which SDK object we use to call the API by default.
 
     def __init__(self):
@@ -139,15 +143,20 @@ class Stream():
     def get_bookmark(self):
         """Function to get bookmark"""
         bookmark = (
-            singer.get_bookmark(
-                Context.state,
-                # name is overridden by some substreams
-                self.name,
-                self.replication_key,
-            )
-            or Context.config["start_date"]
+                singer.get_bookmark(
+                    Context.state,
+                    # name is overridden by some substreams
+                    self.name,
+                    self.replication_key,
+                )
+                or Context.config["start_date"]
         )
         return utils.strptime_to_utc(bookmark)
+
+    @staticmethod
+    def get_project_id():
+        """Retrieve project_id from config, if set."""
+        return Context.config.get("project_id")
 
     def is_bookmark_old(self, value):
         """Function to check bookmark"""
