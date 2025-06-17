@@ -211,7 +211,7 @@ class Stream():
         Returns:
             List[str]: A list of Asana project GIDs.
         """
-        pid = Context.config.get("project_gid")
+        pid = Context.config.get("project_gids")
         return pid
 
     def sync(self):
