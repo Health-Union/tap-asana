@@ -2,7 +2,6 @@ import singer
 from tap_asana.context import Context
 from tap_asana.streams.base import Stream
 
-
 LOGGER = singer.get_logger()
 
 class Stories(Stream):
@@ -68,7 +67,6 @@ class Stories(Stream):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Pre-fetch project IDs using the helper method
         self.project_gids = self.get_project_gids()
 
     def get_objects(self):
@@ -78,24 +76,25 @@ class Stories(Stream):
         modified_since = bookmark.strftime("%Y-%m-%dT%H:%M:%S.%f")
         opt_fields = ",".join(self.fields)
 
+        # iterate over all project ids and continue fetching
         LOGGER.info("Fetching stories...")
         projects_total = len(self.project_gids)
-        projects_fraction = max(projects_total // 100, 1)  # ensure no division by zero
+        projects_fraction = max(projects_total // 100, 1)
 
         for indx, project_gid in enumerate(self.project_gids, 1):
             if (indx % projects_fraction == 0):
                 LOGGER.info(f"Fetching done for projects: {indx - 1}/{projects_total}")
 
             for task in self.call_api(
-                "tasks",
-                project=project_gid,
-                modified_since=modified_since,
+                    "tasks",
+                    project=project_gid,
+                    modified_since=modified_since,
             ):
                 task_gid = task.get("gid")
                 for story in Context.asana.client.stories.get_stories_for_task(
-                    task_gid=task_gid,
-                    opt_fields=opt_fields,
-                    timeout=self.request_timeout,
+                        task_gid=task_gid,
+                        opt_fields=opt_fields,
+                        timeout=self.request_timeout,
                 ):
                     session_bookmark = self.get_updated_session_bookmark(
                         session_bookmark, story[self.replication_key]
@@ -104,5 +103,6 @@ class Stories(Stream):
                         yield story
 
         self.update_bookmark(session_bookmark)
+
 
 Context.stream_objects["stories"] = Stories
