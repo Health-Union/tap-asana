@@ -42,7 +42,7 @@ $ pip install tap-asana
   "refresh_token": "yyy",
   "start_date" : "2018-02-22T02:06:58.147Z",
   "request_timeout": 300,
-  "project_gids" : "['1207756003332473']"
+  "project_gids" : "['1457xxxxx3245']"
 }
 ```
 
