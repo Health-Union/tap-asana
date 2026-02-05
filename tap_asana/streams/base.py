@@ -151,6 +151,10 @@ class Stream():
         )
         return utils.strptime_to_utc(bookmark)
 
+    def clean_bookmark(self, key):
+        """Function to clean bookmark"""
+        singer.clear_bookmark(Context.state, self.name, key)
+
     def is_bookmark_old(self, value):
         """Function to check bookmark"""
         bookmark = self.get_bookmark()
@@ -213,6 +217,28 @@ class Stream():
         """
         pid = Context.config.get("project_gids")
         return pid
+
+    @staticmethod
+    def get_tasks_replication_method():
+        """
+        Retrieve Tasks stream replication method from config or use default INCREMENTAL
+
+        Returns:
+            str: A string "FULL_TABLE" or "INCREMENTAL".
+        """
+        VALID_REPLICATION_METHODS = {"INCREMENTAL", "FULL_TABLE"}
+        method = Context.config.get("tasks_replication_method")
+        if method is None or method == "":
+            replication_method = "INCREMENTAL"
+        else:
+            replication_method = method.strip().upper()
+
+            if replication_method not in VALID_REPLICATION_METHODS:
+                raise ValueError(
+                    "Invalid tasks_replication_method: "
+                    f"{method!r}. Must be one of: INCREMENTAL, FULL_TABLE"
+                )
+        return replication_method
 
     def sync(self):
         """Yield's processed SDK object dicts to the caller."""

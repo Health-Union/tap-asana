@@ -42,7 +42,8 @@ $ pip install tap-asana
   "refresh_token": "yyy",
   "start_date" : "2018-02-22T02:06:58.147Z",
   "request_timeout": 300,
-  "project_gids" : "['123453245']"
+  "project_gids" : ["123453245"],
+  "tasks_replication_method": "FULL_TABLE"
 }
 ```
 
@@ -52,7 +53,9 @@ $ pip install tap-asana
 {
   "access_token": "yyy",
   "start_date" : "2018-02-22T02:06:58.147Z",
-  "request_timeout": 300
+  "request_timeout": 300,
+  "project_gids" : ["123453245"],
+  "tasks_replication_method": "FULL_TABLE"
 }
 ```
    
@@ -64,6 +67,8 @@ $ pip install tap-asana
    The `request_timeout` specifies the timeout for the requests. Default: 300
 
    The `access_token` is a Personal Access Token (PAT) - the quickest and simplest way to authenticate in the API. PATs are generated in the Asana developer console. See the [PATs documentation](https://developers.asana.com/docs/personal-access-token) for more information.
+
+   The `project_gids` and `tasks_replication_method` are optional. The `project_gids` can be used to specify a list of projects to pull tasks and stories stream for instead of pulling data for all the projects in the workspace. By default `Tasks` stream is replicated incremetally, but it can be changed to be fully refreshed (`FULL_TABLE` method).
 
 4. Run the Tap in Discovery Mode
 
