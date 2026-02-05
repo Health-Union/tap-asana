@@ -7,8 +7,6 @@ LOGGER = singer.get_logger()
 
 class Tasks(Stream):
     name = "tasks"
-    replication_key = "modified_at"
-    replication_method = "INCREMENTAL"
     fields = [
         "gid",
         "resource_type",
@@ -51,19 +49,31 @@ class Tasks(Stream):
         "assignee_section"
     ]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.replication_method = self.get_tasks_replication_method()
+        if self.replication_method == "INCREMENTAL":
+            self.replication_key = "modified_at"
+        self.project_gids = self.get_project_gids()
+
     def get_objects(self):
         """Get stream object"""
         # list of project ids
-        project_ids = []
-
+        if self.project_gids and len(self.project_gids) > 0:
+            project_ids = self.project_gids
+        else:
+            project_ids = []
+            for workspace in self.call_api("workspaces"):
+                for project in self.call_api("projects", workspace=workspace["gid"]):
+                    project_ids.append(project["gid"])
+        
         opt_fields = ",".join(self.fields)
-        bookmark = self.get_bookmark()
-        session_bookmark = bookmark
-        modified_since = bookmark.strftime("%Y-%m-%dT%H:%M:%S.%f")
-
-        for workspace in self.call_api("workspaces"):
-            for project in self.call_api("projects", workspace=workspace["gid"]):
-                project_ids.append(project["gid"])
+        if self.replication_method == "INCREMENTAL":
+            bookmark = self.get_bookmark()
+            session_bookmark = bookmark
+            modified_since = bookmark.strftime("%Y-%m-%dT%H:%M:%S.%f")
+        else:
+            self.clean_bookmark("modified_at")
 
         projects_total = len(project_ids)
         projects_fraction = projects_total // 100 # near 1% of total projects
@@ -71,22 +81,31 @@ class Tasks(Stream):
         # iterate over all project ids and continue fetching
         LOGGER.info("Fetching tasks...")
         for indx, project_id in enumerate(project_ids, 1):
-            if (indx % projects_fraction == 0):
+            if (projects_fraction > 0 and indx % projects_fraction == 0):
                 LOGGER.info(f"Fetching done for projects: {indx - 1}/{projects_total}")
-            for task in self.call_api(
-                "tasks",
-                project=project_id,
-                opt_fields=opt_fields,
-                opt_expand="memberships",
-                modified_since=modified_since,
-            ):
-                session_bookmark = self.get_updated_session_bookmark(
-                    session_bookmark, task[self.replication_key]
-                )
-                if self.is_bookmark_old(task[self.replication_key]):
+            if self.replication_method == "INCREMENTAL":
+                for task in self.call_api(
+                    "tasks",
+                    project=project_id,
+                    opt_fields=opt_fields,
+                    opt_expand="memberships",
+                    modified_since=modified_since,
+                ):
+                    session_bookmark = self.get_updated_session_bookmark(
+                        session_bookmark, task[self.replication_key]
+                    )
+                    if self.is_bookmark_old(task[self.replication_key]):
+                        yield task
+            else:
+                for task in self.call_api(
+                    "tasks",
+                    project=project_id,
+                    opt_fields=opt_fields,
+                    opt_expand="memberships",
+                ):
                     yield task
-
-        self.update_bookmark(session_bookmark)
+        if self.replication_method == "INCREMENTAL":
+            self.update_bookmark(session_bookmark)
 
 
 Context.stream_objects["tasks"] = Tasks
