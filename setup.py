@@ -10,13 +10,13 @@ setup(
     classifiers=["Programming Language :: Python :: 3 :: Only"],
     py_modules=["tap_asana"],
     install_requires=[
-        "asana==3.1.0",
-        'singer-python==5.13.0'
+        "asana==3.2.3",
+        'singer-python==5.19.0'
     ],
     extras_require={
         'test': [
             'pylint',
-            'requests==2.20.0',
+            'requests==2.32.4',
             'nose'
         ],
         'dev': [
