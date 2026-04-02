@@ -8,7 +8,6 @@ LOGGER = singer.get_logger()
 class Sections(Stream):
     replication_method = "FULL_TABLE"
     name = "sections"
-
     fields = [
         "gid",
         "resource_type",
@@ -18,16 +17,23 @@ class Sections(Stream):
         "projects"
     ]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.project_gids = self.get_project_gids()
+
     def get_objects(self):
         """Get stream object"""
         # list of project ids
-        project_ids = []
+        if self.project_gids and len(self.project_gids) > 0:
+            project_ids = self.project_gids
+        else:
+            project_ids = []
+
+            for workspace in self.call_api("workspaces"):
+                for project in self.call_api("projects", workspace=workspace["gid"]):
+                    project_ids.append(project["gid"])
 
         opt_fields = ",".join(self.fields)
-
-        for workspace in self.call_api("workspaces"):
-            for project in self.call_api("projects", workspace=workspace["gid"]):
-                project_ids.append(project["gid"])
 
         projects_total = len(project_ids)
         projects_fraction = projects_total // 100 # near 1% of total projects
@@ -35,7 +41,7 @@ class Sections(Stream):
         # iterate on all project ids and execute rest of the sync
         LOGGER.info("Fetching sections...")
         for indx, project_id in enumerate(project_ids, 1):
-            if (indx % projects_fraction == 0):
+            if (projects_fraction > 0 and indx % projects_fraction == 0):
                 LOGGER.info(f"Fetching done for projects: {indx - 1}/{projects_total}")
             for section in Context.asana.client.sections.get_sections_for_project(
                 project_gid=project_id,

@@ -52,17 +52,26 @@ class SubTasks(Stream):
         "assignee_section"
     ]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.project_gids = self.get_project_gids()
+
     def get_objects(self):
         """Get stream object"""
-        # list of project ids
-        project_ids = []
         opt_fields = ",".join(self.fields)
         bookmark = self.get_bookmark()
         session_bookmark = bookmark
         modified_since = bookmark.strftime("%Y-%m-%dT%H:%M:%S.%f")
-        for workspace in self.call_api("workspaces"):
-            for project in self.call_api("projects", workspace=workspace["gid"]):
-                project_ids.append(project["gid"])
+
+        # list of project ids
+        if self.project_gids and len(self.project_gids) > 0:
+            project_ids = self.project_gids
+        else:
+            project_ids = []
+
+            for workspace in self.call_api("workspaces"):
+                for project in self.call_api("projects", workspace=workspace["gid"]):
+                    project_ids.append(project["gid"])
 
         projects_total = len(project_ids)
         projects_fraction = projects_total // 100 # near 1% of total projects
@@ -70,7 +79,7 @@ class SubTasks(Stream):
         # iterate over all project ids and continue fetching
         LOGGER.info("Fetching subtasks...")
         for indx, project_id in enumerate(project_ids, 1):
-            if (indx % projects_fraction == 0):
+            if (projects_fraction > 0 and indx % projects_fraction == 0):
                 LOGGER.info(f"Fetching done for projects: {indx - 1}/{projects_total}")
             tasks_list = self.call_api(
                 "tasks",
